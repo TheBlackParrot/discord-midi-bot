@@ -101,7 +101,7 @@ bot.on('message', function(msg) {
 		help: function() {
 			var out = [
 				"**TheBlackParrot's MIDI Audio Bot**",
-				"[github url]",
+				"https://github.com/TheBlackParrot/discord-midi-bot",
 				"",
 				"**Commands**:",
 				"`" + settings.identifier + "play [file]`: Play a midi file.",
