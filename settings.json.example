@@ -1,0 +1,17 @@
+{
+	"token": "[bot user token]",
+
+	"identifier": "!$",
+
+	"midi_folder": "/srv/code/discord-midi-bot/midi/",
+	"soundfont_folder": "/srv/code/discord-midi-bot/sf2/",
+	"default_soundfont": "TimbresOfHeaven3.4.sf2",
+
+	"default_voice_channel": {
+		"252014855798652928": "252046706819072000"
+	},
+
+	"mods": [
+		"101812335823298560"
+	]
+}
