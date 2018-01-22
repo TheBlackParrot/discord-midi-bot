@@ -21,6 +21,7 @@ function getRandomInt(max) {
 
 var soundfonts = {};
 var radio_mode = {};
+var out_channels = {};
 
 bot.on('message', function(msg) {
 	if(!msg.guild) {
@@ -96,6 +97,14 @@ bot.on('message', function(msg) {
 		radio: function() {
 			radio_mode[msg.guild.id] = true;
 			playMIDI("random", msg);
+		},
+
+		channels: function(args) {
+			if(args[0] == 1) {
+				out_channels[msg.guild.id] = 1;
+			} else if(args[0] == 2) {
+				out_channels[msg.guild.id] = 2;
+			}
 		},
 
 		help: function() {
@@ -198,7 +207,24 @@ function streamMIDI(file, msg, connection) {
 
 	msg.channel.sendMessage(":play_pause: Now playing **" + midiname + "** using soundfont *" + sf2name + "*");
 
-	var timidity_out = spawn('timidity', ['-x', 'soundfont ' + sf2, '-A40,140', file, "-Ow", "-o", "-"]); 
+	var master_vol = 40;
+	var drum_vol = 140;
+	var out_mode = "-Ow";
+	var effects = [];
+	if(msg.guild.id in out_channels) {
+		if(out_channels[msg.guild.id] == 1) {
+			effects = ["--reverb=0", "-EFreverb=d"];
+			out_mode = "-OwM";
+		}
+	}
+	
+	var args = ['-x', 'soundfont ' + sf2, '-A40,140'];
+	if(effects.length > 0) {
+		args = args.concat(effects);
+	}
+	args = args.concat([file, out_mode, "-o", "-"]);
+	
+	var timidity_out = spawn('timidity', args); 
 	var rstream = new stream.PassThrough();
 
 	console.log(timidity_out.pid);
