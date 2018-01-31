@@ -27,7 +27,8 @@ function initGulidSettings() {
 		out_channels: 2,
 		timidity: null,
 		reverb: 15,
-		tempo: 100
+		tempo: 100,
+		rate: 48000
 	};
 }
 
@@ -170,6 +171,21 @@ bot.on('message', function(msg) {
 			msg.channel.send("Tempo set to " + amount + "% of normal speed.");			
 		},
 
+		pitch: function(args) {
+			if(args.length <= 0) {
+				return;
+			}
+
+			var amount = parseInt(args[0]);
+			if(isNaN(amount)) {
+				return;
+			}
+
+			amount = Math.max(Math.min(amount, 200), 50);
+			gsettings.rate = Math.ceil((100/amount)*48000);
+			msg.channel.send("Pitch set to " + amount + "%");
+		},
+
 		help: function() {
 			var out = [
 				"**TheBlackParrot's MIDI Audio Bot**",
@@ -186,6 +202,7 @@ bot.on('message', function(msg) {
 				"`" + settings.identifier + "channels [1,2]`: Set the amount of channels being output *(default: 2)*.",
 				"`" + settings.identifier + "reverb [0-100]`: Set the amount of reverb *(default: 15)*.",
 				"`" + settings.identifier + "tempo [25-300]`: Slow down or speed up the music *(default: 100)*.",
+				"`" + settings.identifier + "pitch [50-200]`: Make the music sound lower or higher in pitch *(default: 100)*.",
 				"",
 				"**To do/need help with:**",
 				"Master volume command (1st part of `-A`)",
@@ -268,7 +285,7 @@ function streamMIDI(file, msg, connection) {
 		effects = ["-EFreverb=f," + gsettings.reverb];
 	}
 	
-	var args = ['-x', 'soundfont ' + sf2, '-A40,140', '-T' + gsettings.tempo];
+	var args = ['-x', 'soundfont ' + sf2, '-A40,140', '-T' + gsettings.tempo, '-s' + gsettings.rate];
 	if(effects.length > 0) {
 		args = args.concat(effects);
 	}
@@ -280,7 +297,7 @@ function streamMIDI(file, msg, connection) {
 		gsettings.timidity.kill();
 	}
 	gsettings.timidity = spawn('timidity', args);
-	connection.play(gsettings.timidity.stdout, {passes: 2, volume: 0.8, bitrate: 96000});
+	connection.play(gsettings.timidity.stdout, {passes: 3, volume: 0.8, bitrate: 96000, type: "converted"});
 
 	gsettings.timidity.stdout.on("finish", function() {
 		setTimeout(function() {
