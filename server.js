@@ -25,8 +25,8 @@ function initGulidSettings() {
 		soundfont: settings.soundfont_folder + settings.default_soundfont,
 		radio_mode: false,
 		out_channels: 2,
-		stream: new stream.PassThrough(),
-		timidity: null
+		timidity: null,
+		reverb: 20
 	};
 }
 
@@ -58,7 +58,7 @@ bot.on('message', function(msg) {
 	const cmds = {
 		play: function(args) {
 			if(args.length == 0) {
-				msg.channel.sendMessage("You must specify a file.");
+				msg.channel.send("You must specify a file.");
 				return;
 			}
 
@@ -66,6 +66,7 @@ bot.on('message', function(msg) {
 		},
 
 		stop: function() {
+			gsettings.radio_mode = false;
 			msg.channel.guild.voiceConnection.disconnect();
 		},
 
@@ -77,7 +78,7 @@ bot.on('message', function(msg) {
 						var size = Math.floor(fs.statSync(settings.soundfont_folder + file).size / 1000000.0);
 						out.push("**" + file + "** (" + size + " MB)");
 					})
-					msg.channel.sendMessage(":warning: You must specify a file. \r\n\r\n:drum: Available soundfonts:\r\n" + out.join("\r\n"));
+					msg.channel.send(":warning: You must specify a file. \r\n\r\n:drum: Available soundfonts:\r\n" + out.join("\r\n"));
 				})
 				return;
 			}
@@ -87,13 +88,13 @@ bot.on('message', function(msg) {
 
 			fs.access(sf2, fs.constants.F_OK, function(err) {
 				if(err) {
-					msg.channel.sendMessage("File doesn't exist.");
+					msg.channel.send("File doesn't exist.");
 					return;
 				}
 
 				gsettings.soundfont = sf2;
 
-				msg.channel.sendMessage(":drum: Soundfont changed to **" + sf2.split('\\').pop().split('/').pop() + "**");
+				msg.channel.send(":drum: Soundfont changed to **" + sf2.split('\\').pop().split('/').pop() + "**");
 			})
 		},
 
@@ -115,6 +116,44 @@ bot.on('message', function(msg) {
 			}
 		},
 
+		radio: function(args) {
+			if(gsettings.radio_mode && args.length > 0) {
+				if(args[0] == "off") {
+					gsettings.radio_mode = false;
+					msg.channel.send("Radio mode has been disabled.");
+				}
+				return;
+			}
+
+			if(!gsettings.radio_mode) {
+				gsettings.radio_mode = true;
+				playMIDI("random", msg);
+			} else {
+				msg.channel.send("Radio is already playing.");
+			}
+		},
+
+		skip: function() {
+			if(gsettings.radio_mode) {
+				streamMIDI("random", msg, msg.guild.voiceConnection);
+			}
+		},
+
+		reverb: function(args) {
+			if(args.length <= 0) {
+				return;
+			}
+
+			var amount = parseInt(args[0]);
+			if(isNaN(amount)) {
+				return;
+			}
+
+			amount_fixed = Math.max(Math.min(Math.ceil((amount/100)*127), 127), 0);
+			gsettings.reverb = amount_fixed;
+			msg.channel.send("Reverb set to " + amount + "%");
+		},
+
 		help: function() {
 			var out = [
 				"**TheBlackParrot's MIDI Audio Bot**",
@@ -126,15 +165,14 @@ bot.on('message', function(msg) {
 				"`" + settings.identifier + "soundfont(/sf2/sf/font)`: Get a list of available soundfonts.",
 				"`" + settings.identifier + "soundfont(/sf2/sf/font) [file]`: Change the soundfont in use.",
 				"`" + settings.identifier + "songs`: List available midi tracks.",
+				"`" + settings.identifier + "radio [off]`: Begin playing music endlessly. Use \"off\" to disable it.",
+				"`" + settings.identifier + "skip`: Skip the currently playing track (only in radio mode).",
 				"",
 				"**To do/need help with:**",
 				"Tempo command",
 				"Reverb percentage command",
 				"Master volume command (1st part of `-A`)",
 				"Drum amplification command (2nd part of `-A`)",
-				"Radio mode",
-				"Skipping songs in radio mode",
-				"Resuming playback in radio mode after a song is manually played",
 				"Toggle for now playing messages",
 				"stdin (timidity) support via request/curl/etc *(big security hazard here, unsure if this should be added at the moment)*",
 				"Permissions for the soundfont (and tempo, now playing msg toggle) command",
@@ -169,8 +207,6 @@ function playMIDI(file, msg) {
 
 	msg.member.voiceChannel.join()
 		.then(function(connection) {
-			connection.playStream(guild_settings[msg.guild.id].stream, {passes: 2, volume: 0.8, bitrate: 96000});
-
 			if(file == "random") {
 				streamMIDI(file, msg, connection);
 				return;
@@ -179,7 +215,7 @@ function playMIDI(file, msg) {
 			file = settings.midi_folder + file.replace(/\.\./g, "");
 			fs.access(file, fs.constants.F_OK, function(err) {
 				if(err) {
-					msg.channel.sendMessage("File doesn't exist.");
+					msg.channel.send("File doesn't exist.");
 					return;
 				}
 
@@ -203,15 +239,16 @@ function streamMIDI(file, msg, connection) {
 	var sf2 = gsettings.soundfont;
 	var sf2name = sf2.split('\\').pop().split('/').pop();
 
-	msg.channel.sendMessage(":play_pause: Now playing **" + midiname + "** using soundfont *" + sf2name + "*");
+	msg.channel.send(":play_pause: Now playing **" + midiname + "** using soundfont *" + sf2name + "*");
 
 	var master_vol = 40;
 	var drum_vol = 140;
 	var out_mode = "-Ow";
-	var effects = [];
 	if(gsettings.out_channels == 1) {
 		effects = ["--reverb=0", "-EFreverb=d"];
 		out_mode = "-OwM";
+	} else {
+		effects = ["-EFreverb=f," + gsettings.reverb];
 	}
 	
 	var args = ['-x', 'soundfont ' + sf2, '-A40,140'];
@@ -221,21 +258,19 @@ function streamMIDI(file, msg, connection) {
 	args = args.concat([file, out_mode, "-o", "-"]);
 	
 	if(gsettings.timidity) {
-		console.log("killing previous timidity process...");
+		//console.log("killing previous timidity process...");
 		gsettings.timidity.stdout.unpipe();
 		gsettings.timidity.kill();
-		while(gsettings.stream.read() != null) {
-			console.log("flushing 1");
-			gsettings.stream.read();
-		}
-		connection.dispatcher.stream.resume();
-		while(connection.dispatcher.stream.read() != null) {
-			console.log("flushing 2");
-			connection.dispatcher.stream.read();
-		}
-		connection.dispatcher.stream.pause();
 	}
 	gsettings.timidity = spawn('timidity', args);
-	gsettings.timidity.stdout.pipe(gsettings.stream);
+	connection.play(gsettings.timidity.stdout, {passes: 2, volume: 0.8, bitrate: 96000});
+
+	gsettings.timidity.stdout.on("finish", function() {
+		setTimeout(function() {
+			if(gsettings.radio_mode) {
+				streamMIDI("random", msg, connection);
+			}
+		}, 500)
+	});
 }
 // timidity -x "soundfont /home/theblackparrot/TimbresOfHeaven3.4.sf2" xmusic5.mid -Ow -o - | ffmpeg -i - -acodec libopus -b:a 192k -y /tmp/test.opus
