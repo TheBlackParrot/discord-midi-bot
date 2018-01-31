@@ -285,7 +285,11 @@ function streamMIDI(file, msg, connection) {
 		effects = ["-EFreverb=f," + gsettings.reverb];
 	}
 	
-	var args = ['-x', 'soundfont ' + sf2, '-A40,140', '-T' + gsettings.tempo, '-s' + gsettings.rate];
+	var rate = gsettings.rate;
+	if(gsettings.out_channels == 1) {
+		rate = gsettings.rate*2;
+	}
+	var args = ['-x', 'soundfont ' + sf2, '-A40,140', '-T' + gsettings.tempo, '-s' + rate];
 	if(effects.length > 0) {
 		args = args.concat(effects);
 	}
