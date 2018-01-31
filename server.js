@@ -19,14 +19,27 @@ function getRandomInt(max) {
   return Math.floor(Math.random() * Math.floor(max));
 }
 
-var soundfonts = {};
-var radio_mode = {};
-var out_channels = {};
+var guild_settings = {}; // guilds are read-only
+function initGulidSettings() {
+	return {
+		soundfont: settings.soundfont_folder + settings.default_soundfont,
+		radio_mode: false,
+		out_channels: 2,
+		stream: new stream.PassThrough(),
+		timidity: null
+	};
+}
 
 bot.on('message', function(msg) {
 	if(!msg.guild) {
 		return;
 	}
+
+	var guild_id = msg.guild.id;
+	if(!(guild_id in guild_settings)) {
+		guild_settings[guild_id] = initGulidSettings();
+	}
+	var gsettings = guild_settings[guild_id];
 
 	var iden = settings.identifier;
 
@@ -49,12 +62,10 @@ bot.on('message', function(msg) {
 				return;
 			}
 
-			radio_mode[msg.guild.id] = false;
 			playMIDI(args[0], msg);
 		},
 
 		stop: function() {
-			radio_mode[msg.guild.id] = false;
 			msg.channel.guild.voiceConnection.disconnect();
 		},
 
@@ -80,30 +91,27 @@ bot.on('message', function(msg) {
 					return;
 				}
 
-				soundfonts[msg.guild.id] = sf2;
+				gsettings.soundfont = sf2;
 
 				msg.channel.sendMessage(":drum: Soundfont changed to **" + sf2.split('\\').pop().split('/').pop() + "**");
 			})
 		},
 
-		songs: function() {
+		songs: function(args) {
 			var attachment_stream = new stream.PassThrough();
-			fs.readdir(settings.midi_folder, function(err, files) {
+			fs.readdir(settings.midi_folder + (args.length > 0 ? args[0].replace(/\.\./g, "") : ""), function(err, files) {
 				var attachment = new discord.Attachment(Buffer.from(files.join("\r\n")), "midi" + Date.now() + ".txt");
 				msg.channel.send("Available midi files:", attachment);
 			});		
 		},
 
-		radio: function() {
-			radio_mode[msg.guild.id] = true;
-			playMIDI("random", msg);
-		},
-
 		channels: function(args) {
 			if(args[0] == 1) {
-				out_channels[msg.guild.id] = 1;
+				gsettings.out_channels = 1;
+				msg.channel.send("Now playing in mono. Reverb has also been disabled.");
 			} else if(args[0] == 2) {
-				out_channels[msg.guild.id] = 2;
+				gsettings.out_channels = 2;
+				msg.channel.send("Now playing in stereo.");
 			}
 		},
 
@@ -118,15 +126,15 @@ bot.on('message', function(msg) {
 				"`" + settings.identifier + "soundfont(/sf2/sf/font)`: Get a list of available soundfonts.",
 				"`" + settings.identifier + "soundfont(/sf2/sf/font) [file]`: Change the soundfont in use.",
 				"`" + settings.identifier + "songs`: List available midi tracks.",
-				"`" + settings.identifier + "radio`: Play midis until stopped or one is manually played.",
 				"",
 				"**To do/need help with:**",
 				"Tempo command",
 				"Reverb percentage command",
 				"Master volume command (1st part of `-A`)",
 				"Drum amplification command (2nd part of `-A`)",
+				"Radio mode",
 				"Skipping songs in radio mode",
-				"Resuming playback in radio mode after a song is manually played (it just disables radio mode for now)",
+				"Resuming playback in radio mode after a song is manually played",
 				"Toggle for now playing messages",
 				"stdin (timidity) support via request/curl/etc *(big security hazard here, unsure if this should be added at the moment)*",
 				"Permissions for the soundfont (and tempo, now playing msg toggle) command",
@@ -153,12 +161,10 @@ function playMIDI(file, msg) {
 		return;
 	}
 
-	if(msg.channel.guild.voiceConnection) {
-		msg.channel.guild.voiceConnection.disconnect();
-	}
-
 	msg.member.voiceChannel.join()
 		.then(function(connection) {
+			connection.playStream(guild_settings[msg.guild.id].stream, {passes: 2, volume: 0.8, bitrate: 96000});
+
 			if(file == "random") {
 				streamMIDI(file, msg, connection);
 				return;
@@ -178,18 +184,7 @@ function playMIDI(file, msg) {
 
 function streamMIDI(file, msg, connection) {
 	var guild = msg.guild.id;
-
-	function tryToContinue (data) {
-		//msg.channel.send("trying to continue...");
-		if(radio_mode[guild]) {
-			connection.dispatcher = null;
-			return streamMIDI("random", msg, connection);
-		}		
-	}
-
-	if(!(typeof connection.dispatcher === "undefined")) {
-		connection.dispatcher.removeListener('end', tryToContinue);
-	}
+	var gsettings = guild_settings[guild];
 
 	if(file == "random") {
 		var files = fs.readdirSync(settings.midi_folder)
@@ -199,10 +194,7 @@ function streamMIDI(file, msg, connection) {
 	}
 	var midiname = file.split('\\').pop().split('/').pop();
 	
-	var sf2 = settings.soundfont_folder + settings.default_soundfont;
-	if(guild in soundfonts) {
-		var sf2 = soundfonts[guild];
-	}
+	var sf2 = gsettings.soundfont;
 	var sf2name = sf2.split('\\').pop().split('/').pop();
 
 	msg.channel.sendMessage(":play_pause: Now playing **" + midiname + "** using soundfont *" + sf2name + "*");
@@ -211,11 +203,9 @@ function streamMIDI(file, msg, connection) {
 	var drum_vol = 140;
 	var out_mode = "-Ow";
 	var effects = [];
-	if(msg.guild.id in out_channels) {
-		if(out_channels[msg.guild.id] == 1) {
-			effects = ["--reverb=0", "-EFreverb=d"];
-			out_mode = "-OwM";
-		}
+	if(gsettings.out_channels == 1) {
+		effects = ["--reverb=0", "-EFreverb=d"];
+		out_mode = "-OwM";
 	}
 	
 	var args = ['-x', 'soundfont ' + sf2, '-A40,140'];
@@ -224,16 +214,12 @@ function streamMIDI(file, msg, connection) {
 	}
 	args = args.concat([file, out_mode, "-o", "-"]);
 	
-	var timidity_out = spawn('timidity', args); 
-	var rstream = new stream.PassThrough();
-
-	console.log(timidity_out.pid);
-
-	timidity_out.stdout.on('data', function(data) {
-		rstream.push(data);
-	});
-	connection.playStream(rstream, {passes: 2, volume: 0.8, bitrate: 96000});
-
-	connection.dispatcher.on('end', tryToContinue);
+	if(gsettings.timidity) {
+		console.log("killing previous timidity process...");
+		gsettings.timidity.stdout.unpipe();
+		gsettings.timidity.kill();
+	}
+	gsettings.timidity = spawn('timidity', args);
+	gsettings.timidity.stdout.pipe(gsettings.stream);
 }
 // timidity -x "soundfont /home/theblackparrot/TimbresOfHeaven3.4.sf2" xmusic5.mid -Ow -o - | ffmpeg -i - -acodec libopus -b:a 192k -y /tmp/test.opus
