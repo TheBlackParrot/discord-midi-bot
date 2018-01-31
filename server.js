@@ -161,6 +161,12 @@ function playMIDI(file, msg) {
 		return;
 	}
 
+	if(msg.guild.voiceConnection) {
+		if(msg.guild.voiceConnection.dispatcher) {
+			msg.guild.voiceConnection.dispatcher.end();
+		}
+	}
+
 	msg.member.voiceChannel.join()
 		.then(function(connection) {
 			connection.playStream(guild_settings[msg.guild.id].stream, {passes: 2, volume: 0.8, bitrate: 96000});
@@ -218,6 +224,16 @@ function streamMIDI(file, msg, connection) {
 		console.log("killing previous timidity process...");
 		gsettings.timidity.stdout.unpipe();
 		gsettings.timidity.kill();
+		while(gsettings.stream.read() != null) {
+			console.log("flushing 1");
+			gsettings.stream.read();
+		}
+		connection.dispatcher.stream.resume();
+		while(connection.dispatcher.stream.read() != null) {
+			console.log("flushing 2");
+			connection.dispatcher.stream.read();
+		}
+		connection.dispatcher.stream.pause();
 	}
 	gsettings.timidity = spawn('timidity', args);
 	gsettings.timidity.stdout.pipe(gsettings.stream);
