@@ -26,7 +26,8 @@ function initGulidSettings() {
 		radio_mode: false,
 		out_channels: 2,
 		timidity: null,
-		reverb: 20
+		reverb: 15,
+		tempo: 100
 	};
 }
 
@@ -154,6 +155,21 @@ bot.on('message', function(msg) {
 			msg.channel.send("Reverb set to " + amount + "%");
 		},
 
+		tempo: function(args) {
+			if(args.length <= 0) {
+				return;
+			}
+
+			var amount = parseInt(args[0]);
+			if(isNaN(amount)) {
+				return;
+			}
+
+			amount = Math.max(Math.min(amount, 300), 25);
+			gsettings.tempo = amount;
+			msg.channel.send("Tempo set to " + amount + "% of normal speed.");			
+		},
+
 		help: function() {
 			var out = [
 				"**TheBlackParrot's MIDI Audio Bot**",
@@ -163,14 +179,15 @@ bot.on('message', function(msg) {
 				"`" + settings.identifier + "play [file]`: Play a midi file.",
 				"`" + settings.identifier + "stop`: Stop playback.",
 				"`" + settings.identifier + "soundfont(/sf2/sf/font)`: Get a list of available soundfonts.",
-				"`" + settings.identifier + "soundfont(/sf2/sf/font) [file]`: Change the soundfont in use.",
+				"`" + settings.identifier + "soundfont(/sf2/sf/font) [file]`: Change the soundfont in use. *(default: " + settings.soundfont + ")*",
 				"`" + settings.identifier + "songs`: List available midi tracks.",
 				"`" + settings.identifier + "radio [off]`: Begin playing music endlessly. Use \"off\" to disable it.",
-				"`" + settings.identifier + "skip`: Skip the currently playing track (only in radio mode).",
+				"`" + settings.identifier + "skip`: Skip the currently playing track *(only in radio mode)*.",
+				"`" + settings.identifier + "channels [1,2]`: Set the amount of channels being output *(default: 2)*.",
+				"`" + settings.identifier + "reverb [0-100]`: Set the amount of reverb *(default: 15)*.",
+				"`" + settings.identifier + "tempo [25-300]`: Slow down or speed up the music *(default: 100)*.",
 				"",
 				"**To do/need help with:**",
-				"Tempo command",
-				"Reverb percentage command",
 				"Master volume command (1st part of `-A`)",
 				"Drum amplification command (2nd part of `-A`)",
 				"Toggle for now playing messages",
@@ -251,7 +268,7 @@ function streamMIDI(file, msg, connection) {
 		effects = ["-EFreverb=f," + gsettings.reverb];
 	}
 	
-	var args = ['-x', 'soundfont ' + sf2, '-A40,140'];
+	var args = ['-x', 'soundfont ' + sf2, '-A40,140', '-T' + gsettings.tempo];
 	if(effects.length > 0) {
 		args = args.concat(effects);
 	}
