@@ -137,6 +137,12 @@ bot.on('message', function(msg) {
 
 		skip: function() {
 			if(gsettings.radio_mode) {
+				gsettings.timidity.stdout.removeAllListeners("finish");
+				gsettings.timidity.stdout.once("disconnect", function() {
+					if(gsettings.radio_mode) {
+						streamMIDI("random", msg, connection);
+					}
+				});
 				streamMIDI("random", msg, null);
 			}
 		},
@@ -311,10 +317,10 @@ function streamMIDI(file, msg, connection) {
 		connection.play(gsettings.timidity.stdout, {passes: 3, volume: 0.8, bitrate: 96000, type: "converted"});
 	}, 500)
 
-	gsettings.timidity.stdout.once("disconnect", function() {
+	gsettings.timidity.stdout.once("finish", function() {
 		if(gsettings.radio_mode) {
 			streamMIDI("random", msg, connection);
-		}
+		}	
 	});
 }
 // timidity -x "soundfont /home/theblackparrot/TimbresOfHeaven3.4.sf2" xmusic5.mid -Ow -o - | ffmpeg -i - -acodec libopus -b:a 192k -y /tmp/test.opus
