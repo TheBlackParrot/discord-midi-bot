@@ -137,7 +137,7 @@ bot.on('message', function(msg) {
 
 		skip: function() {
 			if(gsettings.radio_mode) {
-				streamMIDI("random", msg, msg.guild.voiceConnection);
+				streamMIDI("random", msg, null);
 			}
 		},
 
@@ -210,7 +210,9 @@ bot.on('message', function(msg) {
 				"Toggle for now playing messages",
 				"stdin (timidity) support via request/curl/etc *(big security hazard here, unsure if this should be added at the moment)*",
 				"Permissions for the soundfont (and tempo, now playing msg toggle) command",
-				"Windows/OSX support?"
+				"Windows/OSX support?",
+				"Multiline settings",
+				"-K n       --adjust-key=n, Adjust key by n half tone (-24..24)"
 			];
 			msg.channel.send(out.join("\r\n"));
 		}
@@ -262,6 +264,10 @@ function streamMIDI(file, msg, connection) {
 	var guild = msg.guild.id;
 	var gsettings = guild_settings[guild];
 
+	if(connection == null) {
+		connection = msg.guild.voiceConnection;
+	}
+
 	if(file == "random") {
 		var files = fs.readdirSync(settings.midi_folder)
 		file = settings.midi_folder + files[getRandomInt(files.length)];
@@ -301,14 +307,14 @@ function streamMIDI(file, msg, connection) {
 		gsettings.timidity.kill();
 	}
 	gsettings.timidity = spawn('timidity', args);
-	connection.play(gsettings.timidity.stdout, {passes: 3, volume: 0.8, bitrate: 96000, type: "converted"});
+	setTimeout(function() {
+		connection.play(gsettings.timidity.stdout, {passes: 3, volume: 0.8, bitrate: 96000, type: "converted"});
+	}, 500)
 
-	gsettings.timidity.stdout.on("finish", function() {
-		setTimeout(function() {
-			if(gsettings.radio_mode) {
-				streamMIDI("random", msg, connection);
-			}
-		}, 500)
+	gsettings.timidity.stdout.once("disconnect", function() {
+		if(gsettings.radio_mode) {
+			streamMIDI("random", msg, connection);
+		}
 	});
 }
 // timidity -x "soundfont /home/theblackparrot/TimbresOfHeaven3.4.sf2" xmusic5.mid -Ow -o - | ffmpeg -i - -acodec libopus -b:a 192k -y /tmp/test.opus
