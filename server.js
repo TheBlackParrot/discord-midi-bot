@@ -154,7 +154,7 @@ bot.on('message', function(msg) {
 
 		skip: function() {
 			if(gsettings.radio_mode) {
-				gsettings.timidity.stdout.removeAllListeners("finish");
+				gsettings.timidity.stdout.removeAllListeners("close");
 				gsettings.timidity.stdout.once("disconnect", function() {
 					if(gsettings.radio_mode) {
 						streamMIDI("random", msg, connection);
@@ -387,22 +387,23 @@ function streamMIDI(file, msg, connection) {
 	var sf2 = gsettings.soundfont;
 	var sf2name = sf2.split('\\').pop().split('/').pop();
 
-	msg.channel.send(":play_pause: Now playing **" + midiname + "** using soundfont *" + sf2name + "*");
-
-	var master_vol = 40;
-	var drum_vol = 140;
 	var out_mode = "-Ow";
 	if(gsettings.out_channels == 1) {
 		effects = ["--reverb=0", "-EFreverb=d"];
 		out_mode = "-OwM";
 	} else {
-		effects = ["-EFreverb=f," + gsettings.reverb];
+		if(gsettings.reverb) {
+			effects = ["-EFreverb=f," + gsettings.reverb];
+		} else {
+			effects = ["--reverb=0", "-EFreverb=d"];
+		}
 	}
 	
 	var rate = gsettings.rate;
 	if(gsettings.out_channels == 1) {
 		rate = gsettings.rate*2;
 	}
+
 	var args = ['-x', 'soundfont ' + sf2, '-A' + Object.values(gsettings.volume).join(',') + (gsettings.normalize ? "a" : ""), '-T' + gsettings.tempo, '-s' + rate, '-K' + gsettings.key_adjust];
 	if(effects.length > 0) { args = args.concat(effects); }
 	if(gsettings.piano) { args = args.concat(['-Q10', '-EB0', '-EI0']); }
@@ -413,16 +414,23 @@ function streamMIDI(file, msg, connection) {
 		//console.log("killing previous timidity process...");
 		gsettings.timidity.stdout.unpipe();
 		gsettings.timidity.kill();
+		gsettings.timidity.stdout.removeAllListeners("close");
 	}
+	
 	gsettings.timidity = spawn('timidity', args);
+	msg.channel.send(":play_pause: Now playing **" + midiname + "** using soundfont *" + sf2name + "*");
+
 	setTimeout(function() {
 		connection.play(gsettings.timidity.stdout, {passes: 3, volume: 0.8, bitrate: 96000, type: "converted"});
-	}, 500)
+	}, 500);
 
-	gsettings.timidity.stdout.once("finish", function() {
-		if(gsettings.radio_mode) {
-			streamMIDI("random", msg, connection);
-		}	
-	});
+	if(gsettings.radio_mode) {
+		gsettings.timidity.stdout.once("close", function() {
+			console.log("closed");
+			if(gsettings.radio_mode) {
+				streamMIDI("random", msg, connection);
+			}
+		});
+	}
 }
 // timidity -x "soundfont /home/theblackparrot/TimbresOfHeaven3.4.sf2" xmusic5.mid -Ow -o - | ffmpeg -i - -acodec libopus -b:a 192k -y /tmp/test.opus
