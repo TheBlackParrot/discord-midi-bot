@@ -28,7 +28,14 @@ function initGulidSettings() {
 		timidity: null,
 		reverb: 15,
 		tempo: 100,
-		rate: 48000
+		rate: 48000,
+		volume: {
+			master: 40,
+			drums: 140
+		},
+		normalize: true,
+		key_adjust: 0,
+		piano: false
 	};
 }
 
@@ -74,19 +81,29 @@ bot.on('message', function(msg) {
 
 		soundfont: function(args) {
 			if(args.length == 0) {
-				var out = [];
+				/*var out = [];
 				fs.readdir(settings.soundfont_folder, function(err, files) {
 					files.forEach(function(file) {
 						var size = Math.floor(fs.statSync(settings.soundfont_folder + file).size / 1000000.0);
-						out.push("**" + file + "** (" + size + " MB)");
+						out.push(file);
 					})
 					msg.channel.send(":warning: You must specify a file. \r\n\r\n:drum: Available soundfonts:\r\n" + out.join("\r\n"));
-				})
+				})*/
+				var attachment_stream = new stream.PassThrough();
+				fs.readdir(settings.soundfont_folder + (args.length > 0 ? args[0].replace(/\.\./g, "") : ""), function(err, files) {
+					var attachment = new discord.MessageAttachment(Buffer.from(files.join("\r\n")), "soundfonts" + Date.now() + ".txt");
+					msg.channel.send("Available soundfonts:", attachment);
+				});		
 				return;
 			}
 
-			args[0] = args[0].replace(/\.\./g, "");
-			var sf2 = settings.soundfont_folder + args[0];
+			if(args[0] == "random") {
+				var files = fs.readdirSync(settings.soundfont_folder)
+				var sf2 = settings.soundfont_folder + files[getRandomInt(files.length)];
+			} else {
+				args[0] = args[0].replace(/\.\./g, "");
+				var sf2 = settings.soundfont_folder + args[0];
+			}
 
 			fs.access(sf2, fs.constants.F_OK, function(err) {
 				if(err) {
@@ -103,7 +120,7 @@ bot.on('message', function(msg) {
 		songs: function(args) {
 			var attachment_stream = new stream.PassThrough();
 			fs.readdir(settings.midi_folder + (args.length > 0 ? args[0].replace(/\.\./g, "") : ""), function(err, files) {
-				var attachment = new discord.Attachment(Buffer.from(files.join("\r\n")), "midi" + Date.now() + ".txt");
+				var attachment = new discord.MessageAttachment(Buffer.from(files.join("\r\n")), "midi" + Date.now() + ".txt");
 				msg.channel.send("Available midi files:", attachment);
 			});		
 		},
@@ -187,9 +204,92 @@ bot.on('message', function(msg) {
 				return;
 			}
 
-			amount = Math.max(Math.min(amount, 200), 50);
+			amount = Math.max(Math.min(amount, 200), 75);
 			gsettings.rate = Math.ceil((100/amount)*48000);
 			msg.channel.send("Pitch set to " + amount + "%");
+		},
+
+		volume: function(args) {
+			if(args.length <= 0) {
+				return;
+			}
+
+			var amount = parseInt(args[0]);
+			if(isNaN(amount)) {
+				return;
+			}
+
+			amount = Math.max(Math.min(amount, 200), 0);
+			gsettings.volume.master = Math.ceil((amount/100)*40);
+			msg.channel.send("Master volume set to " + amount + "%");			
+			msg.channel.send("DEBUG: " + gsettings.volume.master);
+		},
+
+		drumvolume: function(args) {
+			if(args.length <= 0) {
+				return;
+			}
+
+			var amount = parseInt(args[0]);
+			if(isNaN(amount)) {
+				return;
+			}
+
+			amount = Math.max(Math.min(amount, 200), 0);
+			gsettings.volume.drums = Math.ceil((amount/100)*150);
+			msg.channel.send("Drum volume set to " + amount + "%");		
+			msg.channel.send("DEBUG: " + gsettings.volume.drums);	
+		},
+
+		normalize: function(args) {
+			if(gsettings.normalize && args.length > 0) {
+				if(args[0] == "off") {
+					gsettings.normalize = false;
+					msg.channel.send("Volume normalizing has been disabled.");
+				}
+				return;
+			}
+
+			if(!gsettings.normalize) {
+				gsettings.normalize = true;
+				msg.channel.send("Volume normalizing has been enabled.");
+			}	
+		},
+
+		key: function(args) {
+			if(args.length <= 0) {
+				return;
+			}
+
+			var amount = parseInt(args[0]);
+			if(isNaN(amount)) {
+				return;
+			}
+
+			gsettings.key_adjust = Math.max(Math.min(amount, 24), -24);
+
+			if(gsettings.key_adjust == 0) {
+				msg.channel.send("MIDIs will now play in their initial key.");
+			} else if(gsettings.key_adjust < 0) {
+				msg.channel.send("MIDIs will now play " + Math.abs(gsettings.key_adjust).toString() + " semitones lower.");
+			} else if(gsettings.key_adjust > 0) {
+				msg.channel.send("MIDIs will now play " + Math.abs(gsettings.key_adjust).toString() + " semitones higher.");
+			}
+		},
+
+		pianoonly: function(args) {
+			if(gsettings.piano && args.length > 0) {
+				if(args[0] == "off") {
+					gsettings.piano = false;
+					msg.channel.send("Piano-only mode has been disabled.");
+				}
+				return;
+			}
+
+			if(!gsettings.piano) {
+				gsettings.piano = true;
+				msg.channel.send("Piano-only mode has been enabled.");
+			}
 		},
 
 		help: function() {
@@ -208,17 +308,19 @@ bot.on('message', function(msg) {
 				"`" + settings.identifier + "channels [1,2]`: Set the amount of channels being output *(default: 2)*.",
 				"`" + settings.identifier + "reverb [0-100]`: Set the amount of reverb *(default: 15)*.",
 				"`" + settings.identifier + "tempo [25-300]`: Slow down or speed up the music *(default: 100)*.",
-				"`" + settings.identifier + "pitch [50-200]`: Make the music sound lower or higher in pitch *(default: 100)*.",
+				"`" + settings.identifier + "pitch [75-200]`: Make the music sound lower or higher in pitch *(default: 100)*.",
+				"`" + settings.identifier + "volume [0-200]`: Make the music sound lower or higher in pitch *(default: 100)*.",
+				"`" + settings.identifier + "drumvolume [0-200]`: Make the music sound lower or higher in pitch *(default: 100)*.",
+				"`" + settings.identifier + "normalize [off]`: Toggle volume normalization *(default: on)*.",
+				"`" + settings.identifier + "key [-24,24]`: Adjust the overall key of the song *(default: 0)*.",
+				"`" + settings.identifier + "pianoonly [off]`: Toggle piano-only mode *(default: off)*.", // -Q10 -EB0
 				"",
 				"**To do/need help with:**",
-				"Master volume command (1st part of `-A`)",
-				"Drum amplification command (2nd part of `-A`)",
 				"Toggle for now playing messages",
 				"stdin (timidity) support via request/curl/etc *(big security hazard here, unsure if this should be added at the moment)*",
 				"Permissions for the soundfont (and tempo, now playing msg toggle) command",
 				"Windows/OSX support?",
-				"Multiline settings",
-				"-K n       --adjust-key=n, Adjust key by n half tone (-24..24)"
+				"Multiline settings"
 			];
 			msg.channel.send(out.join("\r\n"));
 		}
@@ -301,11 +403,11 @@ function streamMIDI(file, msg, connection) {
 	if(gsettings.out_channels == 1) {
 		rate = gsettings.rate*2;
 	}
-	var args = ['-x', 'soundfont ' + sf2, '-A40,140', '-T' + gsettings.tempo, '-s' + rate];
-	if(effects.length > 0) {
-		args = args.concat(effects);
-	}
+	var args = ['-x', 'soundfont ' + sf2, '-A' + Object.values(gsettings.volume).join(',') + (gsettings.normalize ? "a" : ""), '-T' + gsettings.tempo, '-s' + rate, '-K' + gsettings.key_adjust];
+	if(effects.length > 0) { args = args.concat(effects); }
+	if(gsettings.piano) { args = args.concat(['-Q10', '-EB0', '-EI0']); }
 	args = args.concat([file, out_mode, "-o", "-"]);
+	msg.channel.send("DEBUG: " + args.join(" "));
 	
 	if(gsettings.timidity) {
 		//console.log("killing previous timidity process...");
