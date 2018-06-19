@@ -399,6 +399,24 @@ function parseCommand(msg, gsettings, cmd, args) {
 			msg.channel.send("Chorus set to " + amount + "%");
 			break;
 
+		case "status":
+			var out = {
+				soundfont: gsettings.soundfont,
+				radio_mode: gsettings.radio_mode,
+				out_channels: gsettings.out_channels,
+				reverb: gsettings.reverb,
+				tempo: gsettings.tempo,
+				rate: gsettings.rate,
+				volume: gsettings.volume,
+				normalize: gsettings.normalize,
+				key_adjust: gsettings.key_adjust,
+				piano: gsettings.piano,
+				notify: gsettings.notify,
+				chorus: gsettings.chorus
+			};
+			msg.channel.send("```json\n" + JSON.stringify(out, null, 4) + "```");
+			break;
+
 		case "?":
 		case "help":
 			var out = [
@@ -417,8 +435,8 @@ function parseCommand(msg, gsettings, cmd, args) {
 				"`" + settings.identifier + "reverb [0-100]`: Set the amount of reverb *(default: 15)*.",
 				"`" + settings.identifier + "tempo [25-300]`: Slow down or speed up the music *(default: 100)*.",
 				"`" + settings.identifier + "pitch [75-200]`: Make the music sound lower or higher in pitch *(default: 100)*.",
-				"`" + settings.identifier + "volume [0-200]`: Make the music sound lower or higher in pitch *(default: 100)*.",
-				"`" + settings.identifier + "drumvolume [0-200]`: Make the music sound lower or higher in pitch *(default: 100)*.",
+				"`" + settings.identifier + "volume [0-200]`: Change the overall volume *(default: 100)*.",
+				"`" + settings.identifier + "drumvolume [0-200]`: Change the volume of only the drums *(default: 100)*.",
 				"`" + settings.identifier + "normalize [off]`: Toggle volume normalization *(default: on)*.",
 				"`" + settings.identifier + "key [-24,24]`: Adjust the overall key of the song *(default: 0)*.",
 				"`" + settings.identifier + "pianoonly [off]`: Toggle piano-only mode *(default: off)*.",
@@ -427,6 +445,7 @@ function parseCommand(msg, gsettings, cmd, args) {
 				"`" + settings.identifier + "preset`: List all command presets.",
 				"`" + settings.identifier + "preset [file]`: Change settings to what a preset defines.",
 				"`" + settings.identifier + "chorus [0-100]`: Set the amount of chorus *(default: 0)*.",
+				"`" + settings.identifier + "status`: See current values of modifiers.",
 				"",
 				"**Multiline Example**",
 				"```",
@@ -592,7 +611,7 @@ function streamMIDI(file, msg, connection) {
 	
 	gsettings.timidity = spawn('timidity', args);
 	if(gsettings.notify) {
-		msg.channel.send(":play_pause: Now playing **" + midiname + "** using soundfont *" + sf2name + "*");
+		msg.channel.send(":play_pause: Now playing **`" + midiname + "`** using soundfont *`" + sf2name + "`*");
 	}
 
 	setTimeout(function() {
