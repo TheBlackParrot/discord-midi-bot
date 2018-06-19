@@ -35,7 +35,8 @@ function initGulidSettings() {
 		},
 		normalize: true,
 		key_adjust: 0,
-		piano: false
+		piano: false,
+		notify: true
 	};
 }
 
@@ -59,6 +60,7 @@ function parseCommand(msg, gsettings, cmd, args) {
 		case "sf":
 		case "sf2":
 		case "soundfont":
+		case "font":
 			if(args.length == 0) {
 				/*var out = [];
 				fs.readdir(settings.soundfont_folder, function(err, files) {
@@ -294,6 +296,25 @@ function parseCommand(msg, gsettings, cmd, args) {
 			}
 			break;
 
+		case "notify":
+		case "nowplayingnotify":
+		case "nowplayingnotifications":
+		case "npn":
+		case "notifications":
+			if(gsettings.notify && args.length > 0) {
+				if(args[0] == "off") {
+					gsettings.notify = false;
+					msg.channel.send("Now playing notifications have been disabled.");
+				}
+				return;
+			}
+
+			if(!gsettings.notify) {
+				gsettings.notify = true;
+				msg.channel.send("Now playing notifications have been enabled.");
+			}	
+			break;
+
 		case "?":
 		case "help":
 			var out = [
@@ -317,9 +338,18 @@ function parseCommand(msg, gsettings, cmd, args) {
 				"`" + settings.identifier + "normalize [off]`: Toggle volume normalization *(default: on)*.",
 				"`" + settings.identifier + "key [-24,24]`: Adjust the overall key of the song *(default: 0)*.",
 				"`" + settings.identifier + "pianoonly [off]`: Toggle piano-only mode *(default: off)*.",
+				"`" + settings.identifier + "multiline`: Lets the input parser know you're about to input multiple commands.",
+				"`" + settings.identifier + "notify [off]`: Enable automatic notifications of what's currently playing. *(default: on)*",
+				"",
+				"**Multiline Example**",
+				"```",
+				"!$multiline channels 1",
+				"sf2 The_Ultimate_Megadrive_Soundfont.sf2",
+				"tempo 66",
+				"pitch 75",
+				"```",
 				"",
 				"**To do/need help with:**",
-				"Toggle for now playing messages",
 				"stdin (timidity) support via request/curl/etc *(big security hazard here, unsure if this should be added at the moment)*",
 				"Permissions for the soundfont (and tempo, now playing msg toggle) command",
 				"Windows/OSX support?"
@@ -469,7 +499,9 @@ function streamMIDI(file, msg, connection) {
 	}
 	
 	gsettings.timidity = spawn('timidity', args);
-	msg.channel.send(":play_pause: Now playing **" + midiname + "** using soundfont *" + sf2name + "*");
+	if(gsettings.notify) {
+		msg.channel.send(":play_pause: Now playing **" + midiname + "** using soundfont *" + sf2name + "*");
+	}
 
 	setTimeout(function() {
 		connection.play(gsettings.timidity.stdout, {passes: 3, volume: 0.8, bitrate: 96000, type: "converted"});
