@@ -36,11 +36,14 @@ function initGulidSettings() {
 		normalize: true,
 		key_adjust: 0,
 		piano: false,
-		notify: true
+		notify: true,
+		chorus: 0
 	};
 }
 
 function parseCommand(msg, gsettings, cmd, args) {
+	let roles = msg.guild.roles;
+
 	switch(cmd) {
 		case "play":
 			if(args.length == 0) {
@@ -61,6 +64,11 @@ function parseCommand(msg, gsettings, cmd, args) {
 		case "sf2":
 		case "soundfont":
 		case "font":
+			if(!msg.member.roles.find(role => role.name === settings.mod_role)) {
+				msg.channel.send("You do not have the `" + settings.mod_role + "` role.");
+				return;
+			}
+
 			if(args.length == 0) {
 				/*var out = [];
 				fs.readdir(settings.soundfont_folder, function(err, files) {
@@ -123,6 +131,11 @@ function parseCommand(msg, gsettings, cmd, args) {
 		case "endless":
 		case "continuous":
 		case "radio":
+			if(!msg.member.roles.find(role => role.name === settings.mod_role)) {
+				msg.channel.send("You do not have the `" + settings.mod_role + "` role.");
+				return;
+			}
+
 			if(gsettings.radio_mode && args.length > 0) {
 				if(args[0] == "off") {
 					gsettings.radio_mode = false;
@@ -282,6 +295,11 @@ function parseCommand(msg, gsettings, cmd, args) {
 
 		case "pianomode":
 		case "pianoonly":
+			if(!msg.member.roles.find(role => role.name === settings.mod_role)) {
+				msg.channel.send("You do not have the `" + settings.mod_role + "` role.");
+				return;
+			}
+
 			if(gsettings.piano && args.length > 0) {
 				if(args[0] == "off") {
 					gsettings.piano = false;
@@ -301,6 +319,11 @@ function parseCommand(msg, gsettings, cmd, args) {
 		case "nowplayingnotifications":
 		case "npn":
 		case "notifications":
+			if(!msg.member.roles.find(role => role.name === settings.mod_role)) {
+				msg.channel.send("You do not have the `" + settings.mod_role + "` role.");
+				return;
+			}
+			
 			if(gsettings.notify && args.length > 0) {
 				if(args[0] == "off") {
 					gsettings.notify = false;
@@ -315,6 +338,67 @@ function parseCommand(msg, gsettings, cmd, args) {
 			}	
 			break;
 
+		case "preset":
+			if(!msg.member.roles.find(role => role.name === settings.mod_role)) {
+				msg.channel.send("You do not have the `" + settings.mod_role + "` role.");
+				return;
+			}
+
+			if(args.length == 0) {
+				var attachment_stream = new stream.PassThrough();
+				fs.readdir(settings.presets_folder, function(err, files) {
+					var attachment = new discord.MessageAttachment(Buffer.from(files.join("\r\n")), "presets" + Date.now() + ".txt");
+					msg.channel.send("Available presets:", attachment);
+				});		
+				return;
+			}
+
+			if(args[0] == "random") {
+				var files = fs.readdirSync(settings.presets_folder)
+				var preset = settings.presets_folder + files[getRandomInt(files.length)];
+			} else {
+				args[0] = args[0].replace(/\.\./g, "");
+				var preset = settings.presets_folder + args[0];
+			}
+
+			fs.access(preset, fs.constants.F_OK, function(err) {
+				if(err) {
+					msg.channel.send("File doesn't exist.");
+					return;
+				}
+
+				fs.readFile(preset, {encoding: "utf8"}, function(err, data) {
+					if(err) {
+						msg.channel.send("Couldn't read preset.");
+						return;
+					}
+
+					data.split("\n").map(function(line) {
+						var parts = line.split(" ");
+						parseCommand(msg, gsettings, parts[0], parts.slice(1));
+					});
+				});
+
+				//msg.channel.send(":drum: Soundfont changed to **" + preset.split('\\').pop().split('/').pop() + "**");
+			});
+			break;
+
+		case "chorus":
+		case "ch":
+			if(args.length <= 0) {
+				return;
+			}
+
+			var amount = parseInt(args[0]);
+			if(isNaN(amount)) {
+				return;
+			}
+
+			amount = Math.max(Math.min(amount, 100), 0);
+			gsettings.chorus = Math.ceil((amount/100)*127);
+			msg.channel.send("Chorus set to " + amount + "%");
+			break;
+
 		case "?":
 		case "help":
 			var out = [
@@ -325,7 +409,7 @@ function parseCommand(msg, gsettings, cmd, args) {
 				"`" + settings.identifier + "play [file]`: Play a midi file.",
 				"`" + settings.identifier + "stop`: Stop playback.",
 				"`" + settings.identifier + "soundfont(/sf2/sf/font)`: Get a list of available soundfonts.",
-				"`" + settings.identifier + "soundfont(/sf2/sf/font) [file]`: Change the soundfont in use. *(default: " + settings.soundfont + ")*",
+				"`" + settings.identifier + "soundfont(/sf2/sf/font) [file]`: Change the soundfont in use. *(default: " + settings.default_soundfont + ")*",
 				"`" + settings.identifier + "songs`: List available midi tracks.",
 				"`" + settings.identifier + "radio [off]`: Begin playing music endlessly. Use \"off\" to disable it.",
 				"`" + settings.identifier + "skip`: Skip the currently playing track *(only in radio mode)*.",
@@ -340,6 +424,9 @@ function parseCommand(msg, gsettings, cmd, args) {
 				"`" + settings.identifier + "pianoonly [off]`: Toggle piano-only mode *(default: off)*.",
 				"`" + settings.identifier + "multiline`: Lets the input parser know you're about to input multiple commands.",
 				"`" + settings.identifier + "notify [off]`: Enable automatic notifications of what's currently playing. *(default: on)*",
+				"`" + settings.identifier + "preset`: List all command presets.",
+				"`" + settings.identifier + "preset [file]`: Change settings to what a preset defines.",
+				"`" + settings.identifier + "chorus [0-100]`: Set the amount of chorus *(default: 0)*.",
 				"",
 				"**Multiline Example**",
 				"```",
@@ -469,6 +556,7 @@ function streamMIDI(file, msg, connection) {
 	var sf2name = sf2.split('\\').pop().split('/').pop();
 
 	var out_mode = "-Ow";
+	var effects = [];
 	if(gsettings.out_channels == 1) {
 		effects = ["--reverb=0", "-EFreverb=d"];
 		out_mode = "-OwM";
@@ -478,6 +566,10 @@ function streamMIDI(file, msg, connection) {
 		} else {
 			effects = ["--reverb=0", "-EFreverb=d"];
 		}
+	}
+
+	if(gsettings.chorus) {
+		effects = effects.concat(["-EFchorus=s," + gsettings.chorus]);
 	}
 	
 	var rate = gsettings.rate;

@@ -1,0 +1,7 @@
+channels 2
+reverb 15
+chorus 0
+tempo 100
+key 0
+pitch 100
+chorus 0
