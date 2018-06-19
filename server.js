@@ -39,47 +39,26 @@ function initGulidSettings() {
 	};
 }
 
-bot.on('message', function(msg) {
-	if(!msg.guild) {
-		return;
-	}
-
-	var guild_id = msg.guild.id;
-	if(!(guild_id in guild_settings)) {
-		guild_settings[guild_id] = initGulidSettings();
-	}
-	var gsettings = guild_settings[guild_id];
-
-	var iden = settings.identifier;
-
-	if(bot.user.id == msg.author.id) { return; }
-	if(msg.content.length <= iden.length) { return; }
-	if(msg.content.substr(0, iden.length) != iden) { return; }
-
-	var parts = msg.content.substr(2).split(" ");
-
-	var cmd = parts[0];
-	var args = [];
-	if(parts.length > 1) {
-		var args = parts.slice(1);
-	}
-
-	const cmds = {
-		play: function(args) {
+function parseCommand(msg, gsettings, cmd, args) {
+	switch(cmd) {
+		case "play":
 			if(args.length == 0) {
 				msg.channel.send("You must specify a file.");
 				return;
 			}
-
 			playMIDI(args[0], msg);
-		},
+			break;
 
-		stop: function() {
+		case "stop":
 			gsettings.radio_mode = false;
 			msg.channel.guild.voiceConnection.disconnect();
-		},
+			break;
 
-		soundfont: function(args) {
+		case "sounds":
+		case "instruments":
+		case "sf":
+		case "sf2":
+		case "soundfont":
 			if(args.length == 0) {
 				/*var out = [];
 				fs.readdir(settings.soundfont_folder, function(err, files) {
@@ -114,18 +93,22 @@ bot.on('message', function(msg) {
 				gsettings.soundfont = sf2;
 
 				msg.channel.send(":drum: Soundfont changed to **" + sf2.split('\\').pop().split('/').pop() + "**");
-			})
-		},
+			});
+			break;
 
-		songs: function(args) {
+		case "mids":
+		case "tracks":
+		case "midis":
+		case "songs":
 			var attachment_stream = new stream.PassThrough();
 			fs.readdir(settings.midi_folder + (args.length > 0 ? args[0].replace(/\.\./g, "") : ""), function(err, files) {
 				var attachment = new discord.MessageAttachment(Buffer.from(files.join("\r\n")), "midi" + Date.now() + ".txt");
 				msg.channel.send("Available midi files:", attachment);
 			});		
-		},
+			break;
 
-		channels: function(args) {
+		case "c":
+		case "channels":
 			if(args[0] == 1) {
 				gsettings.out_channels = 1;
 				msg.channel.send("Now playing in mono. Reverb has also been disabled.");
@@ -133,9 +116,11 @@ bot.on('message', function(msg) {
 				gsettings.out_channels = 2;
 				msg.channel.send("Now playing in stereo.");
 			}
-		},
+			break;
 
-		radio: function(args) {
+		case "endless":
+		case "continuous":
+		case "radio":
 			if(gsettings.radio_mode && args.length > 0) {
 				if(args[0] == "off") {
 					gsettings.radio_mode = false;
@@ -150,9 +135,10 @@ bot.on('message', function(msg) {
 			} else {
 				msg.channel.send("Radio is already playing.");
 			}
-		},
+			break;
 
-		skip: function() {
+		case "next":
+		case "skip":
 			if(gsettings.radio_mode) {
 				gsettings.timidity.stdout.removeAllListeners("close");
 				gsettings.timidity.stdout.once("disconnect", function() {
@@ -162,9 +148,10 @@ bot.on('message', function(msg) {
 				});
 				streamMIDI("random", msg, null);
 			}
-		},
+			break;
 
-		reverb: function(args) {
+		case "r":
+		case "reverb":
 			if(args.length <= 0) {
 				return;
 			}
@@ -177,9 +164,11 @@ bot.on('message', function(msg) {
 			amount_fixed = Math.max(Math.min(Math.ceil((amount/100)*127), 127), 0);
 			gsettings.reverb = amount_fixed;
 			msg.channel.send("Reverb set to " + amount + "%");
-		},
+			break;
 
-		tempo: function(args) {
+		case "speed":
+		case "t":
+		case "tempo":
 			if(args.length <= 0) {
 				return;
 			}
@@ -192,9 +181,10 @@ bot.on('message', function(msg) {
 			amount = Math.max(Math.min(amount, 300), 25);
 			gsettings.tempo = amount;
 			msg.channel.send("Tempo set to " + amount + "% of normal speed.");			
-		},
+			break;
 
-		pitch: function(args) {
+		case "p":
+		case "pitch":
 			if(args.length <= 0) {
 				return;
 			}
@@ -207,9 +197,12 @@ bot.on('message', function(msg) {
 			amount = Math.max(Math.min(amount, 200), 75);
 			gsettings.rate = Math.ceil((100/amount)*48000);
 			msg.channel.send("Pitch set to " + amount + "%");
-		},
+			break;
 
-		volume: function(args) {
+		case "mv":
+		case "v":
+		case "vol":
+		case "volume":
 			if(args.length <= 0) {
 				return;
 			}
@@ -222,10 +215,14 @@ bot.on('message', function(msg) {
 			amount = Math.max(Math.min(amount, 200), 0);
 			gsettings.volume.master = Math.ceil((amount/100)*40);
 			msg.channel.send("Master volume set to " + amount + "%");			
-			msg.channel.send("DEBUG: " + gsettings.volume.master);
-		},
+			//msg.channel.send("DEBUG: " + gsettings.volume.master);
+			break;
 
-		drumvolume: function(args) {
+		case "drumsvol":
+		case "drumvol":
+		case "drumsvolume":
+		case "dv":
+		case "drumvolume":
 			if(args.length <= 0) {
 				return;
 			}
@@ -238,10 +235,12 @@ bot.on('message', function(msg) {
 			amount = Math.max(Math.min(amount, 200), 0);
 			gsettings.volume.drums = Math.ceil((amount/100)*150);
 			msg.channel.send("Drum volume set to " + amount + "%");		
-			msg.channel.send("DEBUG: " + gsettings.volume.drums);	
-		},
+			//msg.channel.send("DEBUG: " + gsettings.volume.drums);	
+			break;
 
-		normalize: function(args) {
+		case "norm":
+		case "n":
+		case "normalize":
 			if(gsettings.normalize && args.length > 0) {
 				if(args[0] == "off") {
 					gsettings.normalize = false;
@@ -254,9 +253,11 @@ bot.on('message', function(msg) {
 				gsettings.normalize = true;
 				msg.channel.send("Volume normalizing has been enabled.");
 			}	
-		},
+			break;
 
-		key: function(args) {
+		case "keyadjust":
+		case "k":
+		case "key":
 			if(args.length <= 0) {
 				return;
 			}
@@ -275,9 +276,10 @@ bot.on('message', function(msg) {
 			} else if(gsettings.key_adjust > 0) {
 				msg.channel.send("MIDIs will now play " + Math.abs(gsettings.key_adjust).toString() + " semitones higher.");
 			}
-		},
+			break;
 
-		pianoonly: function(args) {
+		case "pianomode":
+		case "pianoonly":
 			if(gsettings.piano && args.length > 0) {
 				if(args[0] == "off") {
 					gsettings.piano = false;
@@ -290,9 +292,10 @@ bot.on('message', function(msg) {
 				gsettings.piano = true;
 				msg.channel.send("Piano-only mode has been enabled.");
 			}
-		},
+			break;
 
-		help: function() {
+		case "?":
+		case "help":
 			var out = [
 				"**TheBlackParrot's MIDI Audio Bot**",
 				"https://github.com/TheBlackParrot/discord-midi-bot",
@@ -313,27 +316,75 @@ bot.on('message', function(msg) {
 				"`" + settings.identifier + "drumvolume [0-200]`: Make the music sound lower or higher in pitch *(default: 100)*.",
 				"`" + settings.identifier + "normalize [off]`: Toggle volume normalization *(default: on)*.",
 				"`" + settings.identifier + "key [-24,24]`: Adjust the overall key of the song *(default: 0)*.",
-				"`" + settings.identifier + "pianoonly [off]`: Toggle piano-only mode *(default: off)*.", // -Q10 -EB0
+				"`" + settings.identifier + "pianoonly [off]`: Toggle piano-only mode *(default: off)*.",
 				"",
 				"**To do/need help with:**",
 				"Toggle for now playing messages",
 				"stdin (timidity) support via request/curl/etc *(big security hazard here, unsure if this should be added at the moment)*",
 				"Permissions for the soundfont (and tempo, now playing msg toggle) command",
-				"Windows/OSX support?",
-				"Multiline settings"
+				"Windows/OSX support?"
 			];
 			msg.channel.send(out.join("\r\n"));
+			break;
+	}
+}
+
+bot.on('message', function(msg) {
+	if(!msg.guild) {
+		return;
+	}
+
+	var guild_id = msg.guild.id;
+	if(!(guild_id in guild_settings)) {
+		guild_settings[guild_id] = initGulidSettings();
+	}
+	var gsettings = guild_settings[guild_id];
+
+	var iden = settings.identifier;
+
+	if(bot.user.id == msg.author.id) { return; }
+	if(msg.content.length <= iden.length) { return; }
+	if(msg.content.substr(0, iden.length) != iden) { return; }
+
+	var parts = msg.content.substr(2).split(" ");
+
+	var cmd = parts[0];
+	var args = [];
+	if(parts.length > 1) {
+		args = parts.slice(1);
+	}
+
+	if(cmd == "multiline") {
+		let content = msg.content.replace(iden + "multiline", "").trim();
+		let lines = content.split("\n").map(function(line) {
+			line = line.trim();
+			console.log(line);
+
+			if(line.length) {
+				parts = line.split(" ");
+				cmd = parts[0];
+				args = [];
+
+				if(parts.length > 1) {
+					args = parts.slice(1);
+				}
+
+				parseCommand(msg, gsettings, cmd, args);
+			}
+		});
+	} else {
+		parseCommand(msg, gsettings, cmd, args);
+	}
+
+	/*
+	if(cmd in cmds) {
+		if(cmd != "multiline") {
+			cmds[cmd](args);
+		} else {
+			cmds[cmd](msg.content);
 		}
 	}
-
-	// shortcuts
-	cmd.sf2 = cmd.sf = cmd.instruments = cmd.sounds = cmd.font = cmd.soundfont;
-	cmd.tracks = cmd.midis = cmd.list = cmd.songs;
-	cmd.endless = cmd.forever = cmd.random = cmd.radio;
-
-	if(cmd in cmds) {
-		cmds[cmd](args);
-	}
+	*/
 });
 
 bot.login(settings.token);
@@ -408,7 +459,7 @@ function streamMIDI(file, msg, connection) {
 	if(effects.length > 0) { args = args.concat(effects); }
 	if(gsettings.piano) { args = args.concat(['-Q10', '-EB0', '-EI0']); }
 	args = args.concat([file, out_mode, "-o", "-"]);
-	msg.channel.send("DEBUG: " + args.join(" "));
+	//msg.channel.send("DEBUG: " + args.join(" "));
 	
 	if(gsettings.timidity) {
 		//console.log("killing previous timidity process...");
