@@ -1,9 +1,18 @@
+const botUpdate = "22-070218";
+
 const discord = require('discord.js');
 const fs = require('fs');
 const spawn = require('child_process').spawn;
 const stream = require('stream');
+const https = require('https');
 
 var settings = require('./settings.json');
+try {
+	var requests = require('./requests.json');
+} catch(err) {
+	console.log("unable to load requests, using blank object");
+	var requests = {};
+}
 
 var bot = new discord.Client();
 
@@ -17,6 +26,10 @@ bot.on('error', function(err) {
 
 function getRandomInt(max) {
   return Math.floor(Math.random() * Math.floor(max));
+}
+
+function generateRandomRequestID() {
+	return Math.floor(Date.now()/1000).toString(36) + "." + (Math.floor(Math.random()*99999)).toString(36);
 }
 
 var guild_settings = {}; // guilds are read-only
@@ -440,48 +453,150 @@ function parseCommand(msg, gsettings, cmd, args) {
 			sendMessage(msg.channel, "```json\n" + JSON.stringify(out, null, 4) + "```");
 			break;
 
+		case "request":
+		case "req":
+		case "download":
+		case "dl":
+		case "add":
+			var attachments = msg.attachments;
+			if(!attachments.array().length) {
+				msg.reply("MIDI files must be added as an attachment to your message.");
+				return;
+			}
+
+			var out = [];
+			var dm_out = [];
+
+			attachments.map(function(attachment) {
+				if(attachment.size > settings.max_midi_size) {
+					out.append("`" + attachment.name + "` is too large.");
+					return;
+				}
+
+				if(attachment.name.toLowerCase().substr(-4) != ".mid") {
+					out.append("`" + attachment.name + "` is not a .MID file.");
+					return;
+				}
+
+				fs.access(settings.midi_folder + attachment.name.replace(/\s/g, "_"), fs.constants.F_OK, function(err) {
+					if(err) {
+						var request = {
+							id: generateRandomRequestID(),
+							requester: {
+								id: msg.member.id,
+								tag: msg.member.user.tag
+							},
+							guild: msg.guild.name,
+							url: attachment.url,
+							timestamp: Date.now(),
+							filesize: Math.floor(attachment.size / 1024) + " KB",
+							filename: attachment.name.replace(/\s/g, "_")
+						};
+
+						out.push("Successfully requested `" + attachment.name + "` to be added to the track list.");
+						dm_out.push([
+							"MIDI request `" + request.id + "`",
+							attachment.url,
+							"```json",
+							JSON.stringify(request, null, 4),
+							"```"
+						].join("\r\n"));
+
+						requests[request.id] = request;
+						fs.writeFileSync("./requests.json", JSON.stringify(requests), "utf-8");
+					} else {
+						msg.reply("This MIDI file already exists.");
+					}
+
+					var owner = bot.users.get(settings.owner_id);
+					if(dm_out.length) {
+						owner.send(dm_out.join("\r\n"));
+					}
+					if(out.length) {
+						msg.reply(out.join("\r\n"));
+					}
+				});
+			});
+			break;
+
+		case "approve":
+		case "yes":
+		case "ap":
+		case "y":
+			var owner = bot.users.get(settings.owner_id);
+			if(msg.member.id != owner.id) {
+				return;
+			}
+
+			if(args.length <= 0) {
+				return;
+			}
+
+			if(!(args[0] in requests)) {
+				msg.reply("This request ID does not exist.");
+				return;
+			}
+
+			var request = requests[args[0]];
+
+			var file = fs.createWriteStream(settings.midi_folder + request.filename);
+			var httpsRequest = https.get(request.url, function(response) {
+				var _ = response.pipe(file);
+				_.on('finish', function() {
+					msg.reply("Downloaded `" + request.filename + "`");
+
+					delete requests[args[0]];
+					fs.writeFileSync("./requests.json", JSON.stringify(requests), "utf-8");
+				});
+			}).on('error', function(err) {
+				fs.unlink(dest);
+				msg.reply("Unable to download file.");
+
+				delete requests[args[0]];
+				fs.writeFileSync("./requests.json", JSON.stringify(requests), "utf-8");
+			});
+			break;
+
 		case "?":
 		case "help":
 			var out = [
 				"**TheBlackParrot's MIDI Audio Bot**",
 				"https://github.com/TheBlackParrot/discord-midi-bot",
 				"",
-				"**Commands**:",
-				"`" + settings.identifier + "play [file]`: Play a midi file.",
-				"`" + settings.identifier + "stop`: Stop playback.",
-				"`" + settings.identifier + "soundfont(/sf2/sf/font)`: Get a list of available soundfonts.",
-				"`" + settings.identifier + "soundfont(/sf2/sf/font) [file]`: Change the soundfont in use. *(default: " + settings.default_soundfont + ")*",
-				"`" + settings.identifier + "songs`: List available midi tracks.",
-				"`" + settings.identifier + "radio [off]`: Begin playing music endlessly. Use \"off\" to disable it.",
-				"`" + settings.identifier + "skip`: Skip the currently playing track *(only in radio mode)*.",
-				"`" + settings.identifier + "channels [1,2]`: Set the amount of channels being output *(default: 2)*.",
-				"`" + settings.identifier + "reverb [0-100]`: Set the amount of reverb *(default: 15)*.",
-				"`" + settings.identifier + "tempo [25-300]`: Slow down or speed up the music *(default: 100)*.",
-				"`" + settings.identifier + "pitch [75-200]`: Make the music sound lower or higher in pitch *(default: 100)*.",
-				"`" + settings.identifier + "volume [0-200]`: Change the overall volume *(default: 100)*.",
-				"`" + settings.identifier + "drumvolume [0-200]`: Change the volume of only the drums *(default: 100)*.",
-				"`" + settings.identifier + "normalize [off]`: Toggle volume normalization *(default: on)*.",
-				"`" + settings.identifier + "key [-24,24]`: Adjust the overall key of the song *(default: 0)*.",
-				"`" + settings.identifier + "pianoonly [off]`: Toggle piano-only mode *(default: off)*.",
-				"`" + settings.identifier + "multiline`: Lets the input parser know you're about to input multiple commands.",
-				"`" + settings.identifier + "notify [off]`: Enable automatic notifications of what's currently playing. *(default: on)*",
-				"`" + settings.identifier + "preset`: List all command presets.",
-				"`" + settings.identifier + "preset [file]`: Change settings to what a preset defines.",
-				"`" + settings.identifier + "chorus [0-100]`: Set the amount of chorus *(default: 0)*.",
-				"`" + settings.identifier + "status`: See current values of modifiers.",
+				"**Update " + botUpdate + "**",
 				"",
-				"**Multiline Example**",
+				"**Commands**:",
+				"**`" + settings.identifier + "play [file]`:** Play a midi file.",
+				"**`" + settings.identifier + "stop`:** Stop playback.",
+				"**`" + settings.identifier + "soundfont(/sf2/sf/font)`:** Get a list of available soundfonts.",
+				"**`" + settings.identifier + "soundfont(/sf2/sf/font) [file]`:** Change the soundfont in use. *(default: " + settings.default_soundfont + ")*",
+				"**`" + settings.identifier + "songs`:** List available midi tracks.",
+				"**`" + settings.identifier + "radio [off]`:** Begin playing music endlessly. Use \"off\" to disable it.",
+				"**`" + settings.identifier + "skip`:** Skip the currently playing track *(only in radio mode)*.",
+				"**`" + settings.identifier + "channels [1,2]`:** Set the amount of channels being output *(default: 2)*.",
+				"**`" + settings.identifier + "reverb [0-100]`:** Set the amount of reverb *(default: 15)*.",
+				"**`" + settings.identifier + "tempo [25-300]`:** Slow down or speed up the music *(default: 100)*.",
+				"**`" + settings.identifier + "pitch [75-200]`:** Make the music sound lower or higher in pitch *(default: 100)*.",
+				"**`" + settings.identifier + "volume [0-200]`:** Change the overall volume *(default: 100)*.",
+				"**`" + settings.identifier + "drumvolume [0-200]`:** Change the volume of only the drums *(default: 100)*.",
+				"**`" + settings.identifier + "normalize [off]`:** Toggle volume normalization *(default: on)*.",
+				"**`" + settings.identifier + "key [-24,24]`:** Adjust the overall key of the song *(default: 0)*.",
+				"**`" + settings.identifier + "pianoonly [off]`:** Toggle piano-only mode *(default: off)*.",
+				"**`" + settings.identifier + "multiline`:** Lets the input parser know you're about to input multiple commands.",
+				"**`" + settings.identifier + "notify [off]`:** Enable automatic notifications of what's currently playing. *(default: on)*",
+				"**`" + settings.identifier + "preset`:** List all command presets.",
+				"**`" + settings.identifier + "preset [file]`:** Change settings to what a preset defines.",
+				"**`" + settings.identifier + "chorus [0-100]`:** Set the amount of chorus *(default: 0)*.",
+				"**`" + settings.identifier + "status`:** See current values of modifiers.",
+				"**`" + settings.identifier + "request`:** Request a track to be added to the song list. ***(UPLOAD VIA DISCORD!)***",
+				"",
+				":notepad_spiral: **Multiline Example**",
 				"```",
 				"!$multiline channels 1",
 				"sf2 The_Ultimate_Megadrive_Soundfont.sf2",
 				"tempo 66",
 				"pitch 75",
-				"```",
-				"",
-				"**To do/need help with:**",
-				"stdin (timidity) support via request/curl/etc *(big security hazard here, unsure if this should be added at the moment)*",
-				"Permissions for the soundfont (and tempo, now playing msg toggle) command",
-				"Windows/OSX support?"
+				"```"
 			];
 			sendMessage(msg.channel, out.join("\r\n"));
 			break;

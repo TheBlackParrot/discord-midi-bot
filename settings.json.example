@@ -12,5 +12,9 @@
 		"252014855798652928": "252046706819072000"
 	},
 
-	"mod_role": "MIDI Bot Manager"
+	"mod_role": "MIDI Bot Manager",
+
+	"owner_id": "[your client ID]",
+
+	"max_midi_size": 5242880
 }
