@@ -37,8 +37,30 @@ function initGulidSettings() {
 		key_adjust: 0,
 		piano: false,
 		notify: true,
-		chorus: 0
+		chorus: 0,
+		last_text_channel: null
 	};
+}
+
+function sendMessage(channel, msg) {
+	let guild_id = channel.guild.id;
+	if(!(guild_id in guild_settings)) {
+		guild_settings[guild_id] = initGulidSettings();
+	}
+	let gsettings = guild_settings[guild_id];
+
+	if(!channel) {
+		if(gsettings.last_text_channel) {
+			channel = gsettings.last_text_channel;
+		} else {
+			return;
+		}
+	}
+
+	channel.send(msg)
+		.then(function(_) {
+			gsettings.last_text_channel = channel;
+		});
 }
 
 function parseCommand(msg, gsettings, cmd, args) {
@@ -47,7 +69,8 @@ function parseCommand(msg, gsettings, cmd, args) {
 	switch(cmd) {
 		case "play":
 			if(args.length == 0) {
-				msg.channel.send("You must specify a file.");
+				//msg.channel.send("You must specify a file.");
+				sendMessage(msg.channel, "You must specify a file.");
 				return;
 			}
 			playMIDI(args[0], msg);
@@ -65,7 +88,7 @@ function parseCommand(msg, gsettings, cmd, args) {
 		case "soundfont":
 		case "font":
 			if(!msg.member.roles.find(role => role.name === settings.mod_role)) {
-				msg.channel.send("You do not have the `" + settings.mod_role + "` role.");
+				sendMessage(msg.channel, "You do not have the `" + settings.mod_role + "` role.");
 				return;
 			}
 
@@ -96,13 +119,13 @@ function parseCommand(msg, gsettings, cmd, args) {
 
 			fs.access(sf2, fs.constants.F_OK, function(err) {
 				if(err) {
-					msg.channel.send("File doesn't exist.");
+					sendMessage(msg.channel, "File doesn't exist.");
 					return;
 				}
 
 				gsettings.soundfont = sf2;
 
-				msg.channel.send(":drum: Soundfont changed to **" + sf2.split('\\').pop().split('/').pop() + "**");
+				sendMessage(msg.channel, ":drum: Soundfont changed to **" + sf2.split('\\').pop().split('/').pop() + "**");
 			});
 			break;
 
@@ -121,10 +144,10 @@ function parseCommand(msg, gsettings, cmd, args) {
 		case "channels":
 			if(args[0] == 1) {
 				gsettings.out_channels = 1;
-				msg.channel.send("Now playing in mono. Reverb has also been disabled.");
+				sendMessage(msg.channel, "Now playing in mono. Reverb has also been disabled.");
 			} else if(args[0] == 2) {
 				gsettings.out_channels = 2;
-				msg.channel.send("Now playing in stereo.");
+				sendMessage(msg.channel, "Now playing in stereo.");
 			}
 			break;
 
@@ -132,14 +155,14 @@ function parseCommand(msg, gsettings, cmd, args) {
 		case "continuous":
 		case "radio":
 			if(!msg.member.roles.find(role => role.name === settings.mod_role)) {
-				msg.channel.send("You do not have the `" + settings.mod_role + "` role.");
+				sendMessage(msg.channel, "You do not have the `" + settings.mod_role + "` role.");
 				return;
 			}
 
 			if(gsettings.radio_mode && args.length > 0) {
 				if(args[0] == "off") {
 					gsettings.radio_mode = false;
-					msg.channel.send("Radio mode has been disabled.");
+					sendMessage(msg.channel, "Radio mode has been disabled.");
 				}
 				return;
 			}
@@ -148,7 +171,7 @@ function parseCommand(msg, gsettings, cmd, args) {
 				gsettings.radio_mode = true;
 				playMIDI("random", msg);
 			} else {
-				msg.channel.send("Radio is already playing.");
+				sendMessage(msg.channel, "Radio is already playing.");
 			}
 			break;
 
@@ -178,7 +201,7 @@ function parseCommand(msg, gsettings, cmd, args) {
 
 			amount_fixed = Math.max(Math.min(Math.ceil((amount/100)*127), 127), 0);
 			gsettings.reverb = amount_fixed;
-			msg.channel.send("Reverb set to " + amount + "%");
+			sendMessage(msg.channel, "Reverb set to " + amount + "%");
 			break;
 
 		case "speed":
@@ -195,7 +218,7 @@ function parseCommand(msg, gsettings, cmd, args) {
 
 			amount = Math.max(Math.min(amount, 300), 25);
 			gsettings.tempo = amount;
-			msg.channel.send("Tempo set to " + amount + "% of normal speed.");			
+			sendMessage(msg.channel, "Tempo set to " + amount + "% of normal speed.");			
 			break;
 
 		case "p":
@@ -211,7 +234,7 @@ function parseCommand(msg, gsettings, cmd, args) {
 
 			amount = Math.max(Math.min(amount, 200), 75);
 			gsettings.rate = Math.ceil((100/amount)*48000);
-			msg.channel.send("Pitch set to " + amount + "%");
+			sendMessage(msg.channel, "Pitch set to " + amount + "%");
 			break;
 
 		case "mv":
@@ -229,7 +252,7 @@ function parseCommand(msg, gsettings, cmd, args) {
 
 			amount = Math.max(Math.min(amount, 200), 0);
 			gsettings.volume.master = Math.ceil((amount/100)*40);
-			msg.channel.send("Master volume set to " + amount + "%");			
+			sendMessage(msg.channel, "Master volume set to " + amount + "%");			
 			//msg.channel.send("DEBUG: " + gsettings.volume.master);
 			break;
 
@@ -249,7 +272,7 @@ function parseCommand(msg, gsettings, cmd, args) {
 
 			amount = Math.max(Math.min(amount, 200), 0);
 			gsettings.volume.drums = Math.ceil((amount/100)*150);
-			msg.channel.send("Drum volume set to " + amount + "%");		
+			sendMessage(msg.channel, "Drum volume set to " + amount + "%");		
 			//msg.channel.send("DEBUG: " + gsettings.volume.drums);	
 			break;
 
@@ -259,14 +282,14 @@ function parseCommand(msg, gsettings, cmd, args) {
 			if(gsettings.normalize && args.length > 0) {
 				if(args[0] == "off") {
 					gsettings.normalize = false;
-					msg.channel.send("Volume normalizing has been disabled.");
+					sendMessage(msg.channel, "Volume normalizing has been disabled.");
 				}
 				return;
 			}
 
 			if(!gsettings.normalize) {
 				gsettings.normalize = true;
-				msg.channel.send("Volume normalizing has been enabled.");
+				sendMessage(msg.channel, "Volume normalizing has been enabled.");
 			}	
 			break;
 
@@ -285,32 +308,32 @@ function parseCommand(msg, gsettings, cmd, args) {
 			gsettings.key_adjust = Math.max(Math.min(amount, 24), -24);
 
 			if(gsettings.key_adjust == 0) {
-				msg.channel.send("MIDIs will now play in their initial key.");
+				sendMessage(msg.channel, "MIDIs will now play in their initial key.");
 			} else if(gsettings.key_adjust < 0) {
-				msg.channel.send("MIDIs will now play " + Math.abs(gsettings.key_adjust).toString() + " semitones lower.");
+				sendMessage(msg.channel, "MIDIs will now play " + Math.abs(gsettings.key_adjust).toString() + " semitones lower.");
 			} else if(gsettings.key_adjust > 0) {
-				msg.channel.send("MIDIs will now play " + Math.abs(gsettings.key_adjust).toString() + " semitones higher.");
+				sendMessage(msg.channel, "MIDIs will now play " + Math.abs(gsettings.key_adjust).toString() + " semitones higher.");
 			}
 			break;
 
 		case "pianomode":
 		case "pianoonly":
 			if(!msg.member.roles.find(role => role.name === settings.mod_role)) {
-				msg.channel.send("You do not have the `" + settings.mod_role + "` role.");
+				sendMessage(msg.channel, "You do not have the `" + settings.mod_role + "` role.");
 				return;
 			}
 
 			if(gsettings.piano && args.length > 0) {
 				if(args[0] == "off") {
 					gsettings.piano = false;
-					msg.channel.send("Piano-only mode has been disabled.");
+					sendMessage(msg.channel, "Piano-only mode has been disabled.");
 				}
 				return;
 			}
 
 			if(!gsettings.piano) {
 				gsettings.piano = true;
-				msg.channel.send("Piano-only mode has been enabled.");
+				sendMessage(msg.channel, "Piano-only mode has been enabled.");
 			}
 			break;
 
@@ -320,27 +343,27 @@ function parseCommand(msg, gsettings, cmd, args) {
 		case "npn":
 		case "notifications":
 			if(!msg.member.roles.find(role => role.name === settings.mod_role)) {
-				msg.channel.send("You do not have the `" + settings.mod_role + "` role.");
+				sendMessage(msg.channel, "You do not have the `" + settings.mod_role + "` role.");
 				return;
 			}
 			
 			if(gsettings.notify && args.length > 0) {
 				if(args[0] == "off") {
 					gsettings.notify = false;
-					msg.channel.send("Now playing notifications have been disabled.");
+					sendMessage(msg.channel, "Now playing notifications have been disabled.");
 				}
 				return;
 			}
 
 			if(!gsettings.notify) {
 				gsettings.notify = true;
-				msg.channel.send("Now playing notifications have been enabled.");
+				sendMessage(msg.channel, "Now playing notifications have been enabled.");
 			}	
 			break;
 
 		case "preset":
 			if(!msg.member.roles.find(role => role.name === settings.mod_role)) {
-				msg.channel.send("You do not have the `" + settings.mod_role + "` role.");
+				sendMessage(msg.channel, "You do not have the `" + settings.mod_role + "` role.");
 				return;
 			}
 
@@ -363,13 +386,13 @@ function parseCommand(msg, gsettings, cmd, args) {
 
 			fs.access(preset, fs.constants.F_OK, function(err) {
 				if(err) {
-					msg.channel.send("File doesn't exist.");
+					sendMessage(msg.channel, "File doesn't exist.");
 					return;
 				}
 
 				fs.readFile(preset, {encoding: "utf8"}, function(err, data) {
 					if(err) {
-						msg.channel.send("Couldn't read preset.");
+						sendMessage(msg.channel, "Couldn't read preset.");
 						return;
 					}
 
@@ -396,7 +419,7 @@ function parseCommand(msg, gsettings, cmd, args) {
 
 			amount = Math.max(Math.min(amount, 100), 0);
 			gsettings.chorus = Math.ceil((amount/100)*127);
-			msg.channel.send("Chorus set to " + amount + "%");
+			sendMessage(msg.channel, "Chorus set to " + amount + "%");
 			break;
 
 		case "status":
@@ -414,7 +437,7 @@ function parseCommand(msg, gsettings, cmd, args) {
 				notify: gsettings.notify,
 				chorus: gsettings.chorus
 			};
-			msg.channel.send("```json\n" + JSON.stringify(out, null, 4) + "```");
+			sendMessage(msg.channel, "```json\n" + JSON.stringify(out, null, 4) + "```");
 			break;
 
 		case "?":
@@ -460,7 +483,7 @@ function parseCommand(msg, gsettings, cmd, args) {
 				"Permissions for the soundfont (and tempo, now playing msg toggle) command",
 				"Windows/OSX support?"
 			];
-			msg.channel.send(out.join("\r\n"));
+			sendMessage(msg.channel, out.join("\r\n"));
 			break;
 	}
 }
@@ -523,6 +546,44 @@ bot.on('message', function(msg) {
 	*/
 });
 
+bot.on('voiceStateUpdate', function(oldMember, newMember) {
+	let guild = newMember.guild;
+	let gsettings = guild_settings[guild.id];
+
+	//console.log("begin");
+
+	if(typeof guild === "undefined") {
+		//console.log("guild was undefined");
+		return;
+	}
+
+	if(!guild.available) {
+		//console.log("guild was unavailable");
+		return;
+	}
+
+	if(typeof oldChannel === "undefined" && typeof newChannel !== "undefined") {
+		//console.log("user joined, stopping check here");
+		return;
+	}
+
+	if(guild.voiceConnection) {
+		let channel = guild.voiceConnection.channel;
+		let members = channel.members;
+
+		//console.log("vc exists");
+
+		if(members.array().length == 1) {
+			//console.log("only me in here");
+			gsettings.radio_mode = false;
+			guild.voiceConnection.disconnect();
+			sendMessage(gsettings.last_text_channel, "Playback has stopped, no one is in the voice channel.");
+		}
+	}
+
+	//console.log("stop");
+});
+
 bot.login(settings.token);
 
 function playMIDI(file, msg) {
@@ -546,12 +607,14 @@ function playMIDI(file, msg) {
 			file = settings.midi_folder + file.replace(/\.\./g, "");
 			fs.access(file, fs.constants.F_OK, function(err) {
 				if(err) {
-					msg.channel.send("File doesn't exist.");
+					sendMessage(msg.channel, "File doesn't exist.");
 					return;
 				}
 
 				streamMIDI(file, msg, connection);
 			});
+		}).catch(function(err) {
+			msg.reply("Couldn't join your current voice channel.").catch(function() {return;});
 		});
 }
 
@@ -611,7 +674,7 @@ function streamMIDI(file, msg, connection) {
 	
 	gsettings.timidity = spawn('timidity', args);
 	if(gsettings.notify) {
-		msg.channel.send(":play_pause: Now playing **`" + midiname + "`** using soundfont *`" + sf2name + "`*");
+		sendMessage(gsettings.last_text_channel ? gsettings.last_text_channel : msg.channel, ":play_pause: Now playing **`" + midiname + "`** using soundfont *`" + sf2name + "`*");
 	}
 
 	setTimeout(function() {
