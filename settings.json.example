@@ -16,5 +16,7 @@
 
 	"owner_id": "[your client ID]",
 
-	"max_midi_size": 5242880
+	"max_midi_size": 5242880,
+
+	"max_multiline_length": 5
 }

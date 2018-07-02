@@ -1,4 +1,4 @@
-const botUpdate = "22-070218";
+const botUpdate = "23-070218";
 
 const discord = require('discord.js');
 const fs = require('fs');
@@ -630,11 +630,19 @@ bot.on('message', function(msg) {
 
 	if(cmd == "multiline") {
 		let content = msg.content.replace(iden + "multiline", "").trim();
+		let usedLines = 0;
+		let maxLines = settings.max_multiline_length;
+
 		let lines = content.split("\n").map(function(line) {
 			line = line.trim();
 			console.log(line);
 
 			if(line.length) {
+				if(usedLines >= maxLines) {
+					return;
+				}
+				usedLines++;
+
 				parts = line.split(" ");
 				cmd = parts[0];
 				args = [];
