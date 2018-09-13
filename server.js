@@ -1,4 +1,4 @@
-const botUpdate = "23-070218";
+const botUpdate = "24-070218";
 
 const discord = require('discord.js');
 const fs = require('fs');
@@ -78,6 +78,8 @@ function sendMessage(channel, msg) {
 
 function parseCommand(msg, gsettings, cmd, args) {
 	let roles = msg.guild.roles;
+	//console.log(cmd);
+	//console.log(args);
 
 	switch(cmd) {
 		case "play":
@@ -91,7 +93,9 @@ function parseCommand(msg, gsettings, cmd, args) {
 
 		case "stop":
 			gsettings.radio_mode = false;
-			msg.channel.guild.voiceConnection.disconnect();
+			if(msg.channel.guild.voiceConnection) {
+				msg.channel.guild.voiceConnection.disconnect();
+			}
 			break;
 
 		case "sounds":
@@ -545,6 +549,11 @@ function parseCommand(msg, gsettings, cmd, args) {
 				_.on('finish', function() {
 					msg.reply("Downloaded `" + request.filename + "`");
 
+					var user = bot.users.get(request.requester.id);
+					if(user) {
+						user.send("`" + request.filename + "` is now available to play!");
+					}
+
 					delete requests[args[0]];
 					fs.writeFileSync("./requests.json", JSON.stringify(requests), "utf-8");
 				});
@@ -635,7 +644,7 @@ bot.on('message', function(msg) {
 
 		let lines = content.split("\n").map(function(line) {
 			line = line.trim();
-			console.log(line);
+			//console.log(line);
 
 			if(line.length) {
 				if(usedLines >= maxLines) {
@@ -710,7 +719,7 @@ bot.on('voiceStateUpdate', function(oldMember, newMember) {
 bot.login(settings.token);
 
 function playMIDI(file, msg) {
-	if(!msg.member.voiceChannel) {
+	if(!msg.member.voice.channel) {
 		return;
 	}
 
@@ -720,7 +729,7 @@ function playMIDI(file, msg) {
 		}
 	}
 
-	msg.member.voiceChannel.join()
+	msg.member.voice.channel.join()
 		.then(function(connection) {
 			if(file == "random") {
 				streamMIDI(file, msg, connection);
@@ -801,12 +810,12 @@ function streamMIDI(file, msg, connection) {
 	}
 
 	setTimeout(function() {
-		connection.play(gsettings.timidity.stdout, {passes: 3, volume: 0.8, bitrate: 96000, type: "converted"});
+		connection.play(gsettings.timidity.stdout, {passes: 4, volume: 0.8, bitrate: 96000, type: "converted"});
 	}, 500);
 
 	if(gsettings.radio_mode) {
 		gsettings.timidity.stdout.once("close", function() {
-			console.log("closed");
+			//console.log("closed");
 			if(gsettings.radio_mode) {
 				streamMIDI("random", msg, connection);
 			}
